@@ -91,6 +91,18 @@ export interface ChatMessage {
   read: boolean
 }
 
+export interface ChatRoom {
+  id: string
+  participants: User[]
+  lastMessage?: ChatMessage
+  lastActivity: Date
+  unreadCount: number
+  context?: {
+    type: string
+    [key: string]: any
+  }
+}
+
 export interface CropDiagnosis {
   id: string
   userId: string

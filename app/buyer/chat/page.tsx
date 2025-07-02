@@ -79,8 +79,8 @@ export default function BuyerChatPage() {
     if (!newMessage.trim() || !currentRoom) return
 
     sendMessage({
-      senderId: user?.id || "",
-      receiverId: currentRoom.participants.find((p) => p.id !== user?.id)?.id || "",
+      senderId: user?._id || "",
+      receiverId: currentRoom.participants.find((p) => p._id !== user?._id)?._id || "",
       message: newMessage,
       read: false,
       type: "text",
@@ -94,8 +94,8 @@ export default function BuyerChatPage() {
     if (file && currentRoom) {
       // In a real app, you'd upload the file and get a URL
       sendMessage({
-        senderId: user?.id || "",
-        receiverId: currentRoom.participants.find((p) => p.id !== user?.id)?.id || "",
+        senderId: user?._id || "",
+        receiverId: currentRoom.participants.find((p) => p._id !== user?._id)?._id || "",
         message: "📷 Shared an image",
         read: false,
         type: "image",
@@ -111,8 +111,8 @@ export default function BuyerChatPage() {
   }
 
   const renderMessage = (message: any) => {
-    const isOwn = message.senderId === user?.id
-    const otherUser = currentRoom?.participants.find((p) => p.id !== user?.id)
+    const isOwn = message.senderId === user?._id
+    const otherUser = currentRoom?.participants.find((p) => p._id !== user?._id)
 
     return (
       <motion.div
@@ -177,7 +177,7 @@ export default function BuyerChatPage() {
 
             {message.type === "image" && message.attachments && (
               <div className="mb-2">
-                {message.attachments.map((attachment, index) => (
+                {message.attachments.map((attachment: { url: string; name: string }, index: number) => (
                   <img
                     key={index}
                     src={attachment.url || "/placeholder.svg"}
@@ -238,7 +238,7 @@ export default function BuyerChatPage() {
             <ScrollArea className="flex-1">
               <div className="p-2">
                 {chatRooms.map((room) => {
-                  const otherUser = room.participants.find((p) => p.id !== user.id)
+                  const otherUser = room.participants.find((p) => p._id !== user?._id)
                   return (
                     <motion.div
                       key={room.id}
@@ -293,15 +293,15 @@ export default function BuyerChatPage() {
                     <div className="flex items-center">
                       <Avatar className="h-10 w-10">
                         <AvatarImage
-                          src={currentRoom.participants.find((p) => p.id !== user.id)?.avatar || "/placeholder.svg"}
+                          src={currentRoom.participants.find((p) => p._id !== user?._id)?.avatar || "/placeholder.svg"}
                         />
                         <AvatarFallback>
-                          {currentRoom.participants.find((p) => p.id !== user.id)?.name?.charAt(0) || "F"}
+                          {currentRoom.participants.find((p) => p._id !== user?._id)?.name?.charAt(0) || "F"}
                         </AvatarFallback>
                       </Avatar>
                       <div className="ml-3">
                         <p className="text-sm font-medium">
-                          {currentRoom.participants.find((p) => p.id !== user.id)?.name}
+                          {currentRoom.participants.find((p) => p._id !== user?._id)?.name}
                         </p>
                         <div className="flex items-center text-xs text-blue-100">
                           <div className="w-2 h-2 bg-green-400 rounded-full mr-1"></div>
