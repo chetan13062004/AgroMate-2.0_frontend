@@ -121,15 +121,20 @@ export default function FarmerOnboardingPage() {
   }
 
   const handleArrayChange = (section: keyof OnboardingData, field: string, value: string, checked: boolean) => {
-    setFormData((prev) => ({
-      ...prev,
-      [section]: {
-        ...prev[section],
-        [field]: checked
-          ? [...(prev[section][field] as string[]), value]
-          : (prev[section][field] as string[]).filter((item) => item !== value),
-      },
-    }))
+    setFormData((prev) => {
+      const currentSection = prev[section] as any;
+      const currentValue = currentSection[field] as string[];
+      
+      return {
+        ...prev,
+        [section]: {
+          ...prev[section],
+          [field]: checked
+            ? [...currentValue, value]
+            : currentValue.filter((item) => item !== value),
+        },
+      };
+    });
   }
 
   const handleFileUpload = (section: keyof OnboardingData, field: string, files: FileList | null) => {
