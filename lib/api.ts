@@ -1,7 +1,13 @@
-const API_BASE_URL = (() => {
-  const raw = process.env.NEXT_PUBLIC_API_URL?.trim().replace(/\/$/, '') || 'http://localhost:5000';
-  return raw;
-})();
+const getApiBaseUrl = () => {
+  // In the browser, use the environment variable or fallback to localhost
+  if (typeof window !== 'undefined') {
+    return (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000').replace(/\/+$/, '');
+  }
+  // For server-side requests, use the production URL
+  return 'https://agromate-3-621t.onrender.com';
+};
+
+const API_BASE_URL = getApiBaseUrl();
 
 export interface ApiResponse<T = any> {
   // The server response body is stored directly in `data`.
@@ -55,7 +61,6 @@ async function apiRequest<T>(
   const config: RequestInit = {
     method,
     headers,
-    credentials: 'include', // This is crucial for sending cookies
     mode: 'cors',
   };
 
@@ -64,9 +69,16 @@ async function apiRequest<T>(
   }
 
   try {
-    console.log(`[API] Sending request to ${endpoint}`, { method, headers: { ...headers, Authorization: headers['Authorization'] ? 'Bearer ***' : 'none' } });
+    const url = `${API_BASE_URL}${endpoint}`;
+    console.log(`[API] Sending request to ${url}`, { 
+      method, 
+      headers: { 
+        ...headers, 
+        Authorization: headers['Authorization'] ? 'Bearer ***' : 'none' 
+      } 
+    });
     
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, config);
+    const response = await fetch(url, config);
     let responseData;
     
     try {
