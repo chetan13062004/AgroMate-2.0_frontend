@@ -10,16 +10,13 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import Image from "next/image";
 import { CheckCircle } from "lucide-react";
 import Swal from "sweetalert2";
 
 export default function RentCheckoutPage() {
-  const { items, clearCart } = useRentalCart() as any;
+  const { items, clearCart } = useRentalCart(); // Removed 'as any' for better type safety
   const router = useRouter();
   const [processing, setProcessing] = useState(false);
-  // Only Cash on Delivery is supported now
-  const paymentMethod = "cod" as const;
   const [errors, setErrors] = useState<{ [k: string]: string }>({});
 
   const [details, setDetails] = useState({
@@ -27,126 +24,90 @@ export default function RentCheckoutPage() {
     phone: "",
     email: "",
     address: "",
-    fromDate: "", // rental start
-    toDate: "",   // rental end
+    fromDate: "",
+    toDate: "",
     notes: "",
   });
 
-  // String for today's date (YYYY-MM-DD) for use in min attribute & validation
-  const todayStr = new Date().toISOString().split("T")[0];
+  const todayStr = useMemo(() => new Date().toISOString().split("T")[0], []);
 
-  const handleChange = (field: string, value: string) =>
-    setDetails((prev) => ({ ...prev, [field]: value }));
-
-  const validateDetails = () => {
-    const e: { [k: string]: string } = {};
-    if (!details.name.trim()) e.name = "Name is required";
-    if (!/^\d{10}$/.test(details.phone)) e.phone = "Enter valid 10-digit phone";
-    if (!/^[\w-.]+@([\w-]+\.)+[\w-]{2,4}$/.test(details.email)) e.email = "Invalid email";
-    if (details.address.trim().length < 10) e.address = "Address too short";
-    if (!details.fromDate) e.fromDate = "Start date required";
-    else if (new Date(details.fromDate) < new Date(todayStr)) e.fromDate = "Start date cannot be in the past";
-    if (!details.toDate) e.toDate = "End date required";
-    else if (new Date(details.toDate) < new Date(todayStr)) e.toDate = "End date cannot be in the past";
-    if (details.fromDate && details.toDate && new Date(details.toDate) < new Date(details.fromDate)) {
-      e.toDate = "End date must be after start date";
+  // More standard handleChange for form elements
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const { name, value } = e.target;
+    setDetails((prev) => ({ ...prev, [name]: value }));
+    // Clear error for the field being edited
+    if (errors[name]) {
+      setErrors((prev) => ({ ...prev, [name]: "" }));
     }
+  };
+  
+  // Memoized validation function to avoid re-running on every render unless details/items change
+  const validateDetails = useMemo(() => () => {
+    const e: { [k: string]: string } = {};
+    
+    if (!details.name.trim()) e.name = "Name is required";
+    else if (details.name.trim().length < 2) e.name = "Name must be at least 2 characters";
 
-    // Availability range validation for every item in the cart
+    if (!details.phone.trim()) e.phone = "Phone number is required";
+    else if (!/^\d{10}$/.test(details.phone.trim())) e.phone = "Please enter a valid 10-digit phone number";
+
+    if (!details.email.trim()) e.email = "Email is required";
+    else if (!/^\S+@\S+\.\S+$/.test(details.email)) e.email = "Please enter a valid email address";
+
+    if (!details.address.trim()) e.address = "Address is required";
+    else if (details.address.trim().length < 10) e.address = "Address must be at least 10 characters";
+
+    if (!details.fromDate) e.fromDate = "Start date is required";
+    else if (details.fromDate < todayStr) e.fromDate = "Start date cannot be in the past";
+
+    if (!details.toDate) e.toDate = "End date is required";
+    else if (new Date(details.toDate) < new Date(details.fromDate || todayStr)) e.toDate = "End date must be after the start date";
+
     if (details.fromDate && details.toDate) {
-      items.forEach((item: any) => {
-        if (item.availabilityStartDate && new Date(details.fromDate) < new Date(item.availabilityStartDate)) {
-          e.fromDate = `Start date must be on/after ${new Date(item.availabilityStartDate).toLocaleDateString()}`;
-        }
-        if (item.availabilityEndDate && new Date(details.toDate) > new Date(item.availabilityEndDate)) {
-          e.toDate = `End date must be on/before ${new Date(item.availabilityEndDate).toLocaleDateString()}`;
-        }
-      });
+        items.forEach((item: any) => {
+          if (item.availabilityStartDate && new Date(details.fromDate) < new Date(item.availabilityStartDate)) {
+            e.fromDate = `Start must be on/after ${new Date(item.availabilityStartDate).toLocaleDateString()}`;
+          }
+          if (item.availabilityEndDate && new Date(details.toDate) > new Date(item.availabilityEndDate)) {
+            e.toDate = `End must be on/before ${new Date(item.availabilityEndDate).toLocaleDateString()}`;
+          }
+        });
     }
 
     return e;
-  };
+  }, [details, items, todayStr]);
 
-  const basicValid = details.name && details.phone && details.email && details.address && details.fromDate && details.toDate;
+  const isFormValid = useMemo(() => Object.keys(validateDetails()).length === 0, [validateDetails]);
 
-  // Determine rental duration (inclusive of both start and end date)
-    // Determine rental duration (inclusive of both start and end date)
-  const rentalDays =
-    details.fromDate && details.toDate
-      ? Math.max(
-          1,
-          Math.ceil(
-            (new Date(details.toDate).getTime() - new Date(details.fromDate).getTime()) / 86400000
-          ) + 1
-        )
-      : 0;
+  const rentalDays = useMemo(() => {
+    if (!details.fromDate || !details.toDate || new Date(details.toDate) < new Date(details.fromDate)) return 0;
+    const diffTime = new Date(details.toDate).getTime() - new Date(details.fromDate).getTime();
+    return Math.max(1, Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1); // +1 to include end date
+  }, [details.fromDate, details.toDate]);
 
-  // Calculate total price across all items based on selected duration (fallback to previous days)
-  const subtotal = items.reduce(
-    (sum: number, item: any) => sum + item.price * (rentalDays || item.days),
-    0
+  const subtotal = useMemo(() => 
+    items.reduce((sum: number, item: any) => sum + item.price * rentalDays, 0),
+    [items, rentalDays]
   );
-  const taxes = Math.round(subtotal * 0.05); // 5% GST approximation
-  const total = subtotal + taxes;
+  
+  const taxes = useMemo(() => Math.round(subtotal * 0.05), [subtotal]);
+  const total = useMemo(() => subtotal + taxes, [subtotal, taxes]);
 
-  // Overall availability window across all items in cart
   const availabilityWindow = useMemo(() => {
     if (items.length === 0) return null;
-    const latestStart = new Date(
-      Math.max(...items.map((i: any) => new Date(i.availabilityStartDate).getTime()))
-    );
-    const earliestEnd = new Date(
-      Math.min(...items.map((i: any) => new Date(i.availabilityEndDate).getTime()))
-    );
-    if (latestStart > earliestEnd) return null; // no common window
-    return { latestStart, earliestEnd } as const;
+    const latestStart = new Date(Math.max(...items.map((i: any) => new Date(i.availabilityStartDate || 0).getTime())));
+    const earliestEnd = new Date(Math.min(...items.map((i: any) => new Date(i.availabilityEndDate || '9999-12-31').getTime())));
+    if (latestStart > earliestEnd) return { latestStart: new Date(0), earliestEnd: new Date(0), noOverlap: true };
+    return { latestStart, earliestEnd };
   }, [items]);
 
   useEffect(() => {
-    // Redirect back to cart if it becomes empty
     if (items.length === 0 && !processing) {
       router.replace("/rent-cart");
     }
   }, [items, processing, router]);
-
   
-
-  const handlePayment = async (): Promise<boolean> => {
-  // Always true since only COD
-  return true;
-};
-      
-      
-      
-      
-      
-        
-        
-        
-
-      
-        
-
-      
-        
-          
-  
-
-
-
-
   const placeOrder = async () => {
-    const errs = validateDetails();
-    setErrors(errs);
-    if (Object.keys(errs).length) {
-      await Swal.fire("Invalid details", "Please correct form errors and try again.", "error");
-      return;
-    }
-    setProcessing(true);
-
-    const paid = await handlePayment();
-    if (!paid) { setProcessing(false); return; }
-
     const id = `rent-${Date.now()}`;
     const order = {
       id,
@@ -157,171 +118,140 @@ export default function RentCheckoutPage() {
       renter: details,
       placedAt: new Date().toISOString()
     };
-
     if (typeof window !== "undefined") {
       localStorage.setItem(`order-${id}`, JSON.stringify(order));
       const list = JSON.parse(localStorage.getItem("rentalOrderIds") || "[]");
-      if (!list.includes(id)) {
-        localStorage.setItem("rentalOrderIds", JSON.stringify([...list, id]));
-      }
+      localStorage.setItem("rentalOrderIds", JSON.stringify([...list, id]));
     }
-
     clearCart();
-
-    Swal.fire({
+    await Swal.fire({
       title: "Order Confirmed!",
       text: "Your rental order has been successfully placed.",
       icon: "success",
       confirmButtonText: "View My Rentals",
-    }).then(() => {
-      router.push("/rent-history");
     });
+    router.push("/rent-history");
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const validationErrors = validateDetails();
+    setErrors(validationErrors);
+    
+    if (Object.keys(validationErrors).length === 0) {
+      setProcessing(true);
+      await placeOrder();
+    }
   };
 
   if (items.length === 0) {
-    return null; // Will redirect via useEffect
+    return null; // Redirects via useEffect
   }
 
   return (
-    <div className="max-w-4xl mx-auto p-6 space-y-6">
-      <h1 className="text-3xl font-bold mb-4">Rental Checkout</h1>
-      {availabilityWindow && (
-        <div className="mb-6 rounded-md bg-green-50 border border-green-200 p-3 text-sm text-green-800">
-          Available to rent between <b>{availabilityWindow.latestStart.toLocaleDateString()}</b> and <b>{availabilityWindow.earliestEnd.toLocaleDateString()}</b>.
+    <div className="max-w-6xl mx-auto p-4 md:p-6 space-y-6">
+      <h1 className="text-3xl font-bold">Rental Checkout</h1>
+      {availabilityWindow && !availabilityWindow.noOverlap && (
+        <div className="rounded-md bg-green-50 border border-green-200 p-3 text-sm text-green-800">
+          All items are available between <b>{availabilityWindow.latestStart.toLocaleDateString()}</b> and <b>{availabilityWindow.earliestEnd.toLocaleDateString()}</b>.
         </div>
       )}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Items */}
-        <div className="lg:col-span-2 space-y-4">
-          {/* Renter Details Form */}
+       {availabilityWindow?.noOverlap && (
+        <div className="rounded-md bg-red-50 border border-red-200 p-3 text-sm text-red-800">
+          The items in your cart have no overlapping rental dates. Please adjust your cart.
+        </div>
+      )}
+      <form onSubmit={handleSubmit} className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2 space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle>Your Details</CardTitle>
+              <CardTitle>Your Details & Rental Period</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <Label>Name</Label>
-                  <Input
-                    placeholder="Full name"
-                    value={details.name}
-                    onChange={(e) => handleChange("name", e.target.value)}
-                  />
+                  <Label htmlFor="name">Name</Label>
+                  <Input id="name" name="name" placeholder="Enter your full name" value={details.name} onChange={handleChange} className={errors.name ? 'border-red-500' : ''} />
+                  {errors.name && <p className="text-red-500 text-sm mt-1">{errors.name}</p>}
                 </div>
                 <div>
-                  <Label>Phone {errors.phone && <span className="text-red-600 text-xs">– {errors.phone}</span>}</Label>
-                  <Input
-                    placeholder="10-digit mobile number"
-                    value={details.phone}
-                    onChange={(e) => handleChange("phone", e.target.value)}
-                    className={errors.phone ? "border-red-500" : ""}
-                  />
+                  <Label htmlFor="phone">Phone</Label>
+                  <Input id="phone" name="phone" placeholder="10-digit mobile number" value={details.phone} onChange={handleChange} className={errors.phone ? 'border-red-500' : ''} />
+                  {errors.phone && <p className="text-red-500 text-sm mt-1">{errors.phone}</p>}
+                </div>
+              </div>
+              <div>
+                <Label htmlFor="email">Email</Label>
+                <Input id="email" name="email" type="email" placeholder="example@mail.com" value={details.email} onChange={handleChange} className={errors.email ? 'border-red-500' : ''} />
+                {errors.email && <p className="text-red-500 text-sm mt-1">{errors.email}</p>}
+              </div>
+              <div>
+                <Label htmlFor="address">Delivery Address</Label>
+                <Textarea id="address" name="address" placeholder="Full address for delivery and pickup" value={details.address} onChange={handleChange} className={errors.address ? 'border-red-500' : ''} />
+                {errors.address && <p className="text-red-500 text-sm mt-1">{errors.address}</p>}
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="fromDate">From Date</Label>
+                  <Input id="fromDate" name="fromDate" type="date" min={todayStr} value={details.fromDate} onChange={handleChange} className={errors.fromDate ? 'border-red-500' : ''} />
+                  {errors.fromDate && <p className="text-red-500 text-sm mt-1">{errors.fromDate}</p>}
                 </div>
                 <div>
-                  <Label>Email {errors.email && <span className="text-red-600 text-xs">– {errors.email}</span>}</Label>
-                  <Input
-                    type="email"
-                    placeholder="example@mail.com"
-                    value={details.email}
-                    onChange={(e) => handleChange("email", e.target.value)}
-                    className={errors.email ? "border-red-500" : ""}
-                  />
-                </div>
-                <div>
-                  <Label>Address {errors.address && <span className="text-red-600 text-xs">– {errors.address}</span>}</Label>
-                  <Textarea
-                    rows={3}
-                    placeholder="Delivery / pickup address"
-                    value={details.address}
-                    onChange={(e) => handleChange("address", e.target.value)}
-                  />
-                </div>
-                <div>
-                  <Label>From Date {errors.fromDate && <span className="text-red-600 text-xs">– {errors.fromDate}</span>}</Label>
-                  <Input
-                    type="date"
-                    min={todayStr}
-                    value={details.fromDate}
-                    onChange={(e) => handleChange("fromDate", e.target.value)}
-                    className={errors.fromDate ? "border-red-500" : ""}
-                  />
-                </div>
-                <div>
-                  <Label>To Date {errors.toDate && <span className="text-red-600 text-xs">– {errors.toDate}</span>}</Label>
-                  <Input
-                    type="date"
-                    min={todayStr}
-                    value={details.toDate}
-                    onChange={(e) => handleChange("toDate", e.target.value)}
-                    className={errors.toDate ? "border-red-500" : ""}
-                  />
-                </div>
-                <div>
-                  <Label>Notes</Label>
-                  <Textarea
-                    rows={3}
-                    placeholder="Any special instructions..."
-                    value={details.notes}
-                    onChange={(e) => handleChange("notes", e.target.value)}
-                  />
+                  <Label htmlFor="toDate">To Date</Label>
+                  <Input id="toDate" name="toDate" type="date" min={details.fromDate || todayStr} value={details.toDate} onChange={handleChange} className={errors.toDate ? 'border-red-500' : ''} />
+                  {errors.toDate && <p className="text-red-500 text-sm mt-1">{errors.toDate}</p>}
                 </div>
               </div>
             </CardContent>
           </Card>
-          {items.map((item: any) => (
-            <Card key={item.id}>
-              <CardContent className="flex space-x-4 p-4 items-center">
-                <div className="relative w-24 h-24">
-                  <Image src={item.image} alt={item.name} fill className="object-cover rounded" />
-                </div>
-                <div className="flex-1">
-                  <p className="font-medium">{item.name}</p>
-                  <p className="text-sm text-gray-600">₹{item.price.toLocaleString()} / day</p>
-                  <p className="text-sm">Days: {rentalDays || item.days}</p>
-                </div>
-                <p className="font-semibold">₹{(item.price * item.days).toLocaleString()}</p>
-              </CardContent>
-            </Card>
-          ))}
         </div>
-
-        {/* Summary */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Price Summary</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            <div className="flex justify-between">
-              <span>Subtotal</span>
-              <span>₹{subtotal.toLocaleString()}</span>
-            </div>
-            <div className="flex justify-between">
-              <span>Taxes (5%)</span>
-              <span>₹{taxes.toLocaleString()}</span>
-            </div>
-            {/* Payment method */}
-            <div className="mt-4">
-              <Label className="mb-2 inline-block">Payment Method</Label>
-              <div className="flex gap-4 mt-1">
-                <span className="font-medium">Cash on Pickup/Delivery</span>
+        
+        <div className="lg:col-span-1 space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Order Summary</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+               <div>
+                <h3 className="font-semibold mb-2">Rental Items ({items.length})</h3>
+                <div className="space-y-3 max-h-60 overflow-y-auto pr-2 text-sm">
+                  {items.map((item: any) => (
+                    <div key={item._id} className="flex justify-between items-start">
+                      <div className="flex-1 pr-2">
+                        <p className="font-medium leading-tight">{item.name}</p>
+                        <p className="text-gray-500">₹{item.price.toLocaleString()}{rentalDays > 0 ? ` × ${rentalDays} days` : "/day"}</p>
+                      </div>
+                      <span className="font-medium whitespace-nowrap">₹{(item.price * rentalDays).toLocaleString()}</span>
+                    </div>
+                  ))}
+                </div>
               </div>
-            </div>
-            <Separator className="my-4" />
-            <div className="flex justify-between font-semibold text-lg">
-              <span>Total</span>
-              <span>₹{total.toLocaleString()}</span>
-            </div>
-            <Button className="w-full mt-4" disabled={processing || !basicValid} onClick={placeOrder}>
-              {processing ? "Placing order..." : "Place Order"}
-            </Button>
-            <Link href="/rent-cart">
-              <Button className="w-full mt-2" variant="outline" disabled={processing}>
-                Back to Cart
-              </Button>
-            </Link>
-          </CardContent>
-        </Card>
-      </div>
+              <Separator />
+              <div className="space-y-2">
+                <div className="flex justify-between"><span>Subtotal</span><span>₹{subtotal.toLocaleString()}</span></div>
+                <div className="flex justify-between"><span>Taxes (5%)</span><span>₹{taxes.toLocaleString()}</span></div>
+                <Separator />
+                <div className="flex justify-between font-bold text-lg"><span>Total</span><span>₹{total.toLocaleString()}</span></div>
+              </div>
+              <div className="mt-4">
+                <Label className="mb-2 block">Payment Method</Label>
+                <div className="flex items-center gap-2 p-3 rounded-md border bg-slate-50">
+                    <CheckCircle className="h-5 w-5 text-green-600" />
+                    <span className="font-medium">Cash on Delivery</span>
+                </div>
+              </div>
+              <div className="flex flex-col gap-2 mt-4">
+                <Button type="submit" className="w-full" disabled={processing || !isFormValid || !!availabilityWindow?.noOverlap}>
+                  {processing ? "Placing Order..." : `Place Order (COD)`}
+                </Button>
+                <Button asChild className="w-full" variant="outline" disabled={processing}>
+                  <Link href="/rent-cart">Back to Cart</Link>
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </form>
     </div>
   );
 }

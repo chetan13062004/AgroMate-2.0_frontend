@@ -1,13 +1,69 @@
 const getApiBaseUrl = () => {
-  // In the browser, use the environment variable or fallback to localhost
-  if (typeof window !== 'undefined') {
-    return (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000').replace(/\/+$/, '');
+  // In development, use the full URL to the local backend
+  if (process.env.NODE_ENV === 'development') {
+    return 'http://localhost:5000/api';
   }
-  // For server-side requests, use the production URL
-  return 'https://agromate-3-621t.onrender.com';
+  // In production, use the full URL
+  return process.env.NEXT_PUBLIC_API_URL || 'https://agromate-3-621t.onrender.com/api';
 };
 
 const API_BASE_URL = getApiBaseUrl();
+
+import axios from 'axios';
+
+const api = axios.create({
+  baseURL: API_BASE_URL,
+  withCredentials: true,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+  timeout: 10000, // 10 seconds timeout
+});
+
+// Request interceptor to add auth token
+api.interceptors.request.use(
+  (config) => {
+    if (typeof window !== 'undefined') {
+      const token = localStorage.getItem('token');
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+      }
+    }
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
+
+// Response interceptor to handle errors
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response) {
+      const { status } = error.response;
+      
+      if (status === 401) {
+        // Clear invalid token and redirect to login
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('token');
+          window.location.href = '/login';
+        }
+      } else if (status === 403) {
+        // Handle forbidden access
+        console.error('Access denied: You do not have permission to access this resource');
+      }
+    } else if (error.code === 'ECONNABORTED') {
+      console.error('Request timeout: The server took too long to respond');
+    } else if (!navigator.onLine) {
+      console.error('Network error: Please check your internet connection');
+    } else {
+      console.error('An unexpected error occurred:', error.message);
+    }
+    
+    return Promise.reject(error);
+  }
+);
 
 export interface ApiResponse<T = any> {
   // The server response body is stored directly in `data`.
@@ -39,13 +95,15 @@ interface UserData {
   categories?: string[];
 }
 
-async function apiRequest<T>(
+export async function apiRequest<T>(
   endpoint: string,
   method: string = 'GET',
   data: any = null,
   token?: string
 ): Promise<ApiResponse<T>> {
-  console.log(`[API] ${method} ${endpoint}`);
+  const url = `${API_BASE_URL}${endpoint.startsWith('/') ? '' : '/'}${endpoint}`;
+  
+  console.log(`[API] ${method} ${url}`);
   
   const headers: HeadersInit = {
     'Content-Type': 'application/json',
@@ -60,8 +118,16 @@ async function apiRequest<T>(
 
   const config: RequestInit = {
     method,
-    headers,
+    headers: {
+      ...headers,
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+    },
     mode: 'cors',
+    credentials: 'include', // Important for cookies
+    cache: 'no-cache',
+    redirect: 'follow',
+    referrerPolicy: 'no-referrer',
   };
 
   if (data && (method === 'POST' || method === 'PUT' || method === 'PATCH')) {
@@ -69,20 +135,21 @@ async function apiRequest<T>(
   }
 
   try {
-    const url = `${API_BASE_URL}${endpoint}`;
-    console.log(`[API] Sending request to ${url}`, { 
-      method, 
-      headers: { 
-        ...headers, 
-        Authorization: headers['Authorization'] ? 'Bearer ***' : 'none' 
-      } 
-    });
-    
     const response = await fetch(url, config);
-    let responseData;
     
+    // Handle 204 No Content
+    if (response.status === 204) {
+      return { status: 204, data: null } as unknown as ApiResponse<T>;
+    }
+    
+    let responseData;
     try {
-      responseData = await response.json();
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        responseData = await response.json();
+      } else {
+        responseData = await response.text();
+      }
     } catch (jsonError) {
       console.error('[API] Failed to parse JSON response:', jsonError);
       responseData = {};
@@ -125,16 +192,18 @@ async function apiRequest<T>(
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Network error';
     console.error(`[API] Request error: ${errorMessage}`, { 
-      endpoint,
-      error 
+      url,
+      error,
+      timestamp: new Date().toISOString()
     });
     
     return {
       error: {
         message: errorMessage,
-        statusCode: 500,
+        statusCode: error instanceof TypeError && error.message.includes('Failed to fetch') ? 503 : 500,
       },
       status: 500,
+      message: errorMessage,
     };
   }
 }
@@ -161,6 +230,14 @@ interface AuthResponse {
 }
 
 // Product related interfaces
+export interface ProductImage {
+  url: string;
+  public_id: string;
+  width?: number;
+  height?: number;
+  format?: string;
+}
+
 export interface Product {
   _id: string;
   name: string;
@@ -170,23 +247,18 @@ export interface Product {
   stock: number;
   status: string;
   description: string;
-  imageUrl?: string;
+  images: ProductImage[];  // Array of Cloudinary images
+  imageUrl?: string;  // Deprecated - kept for backward compatibility
   lowStockThreshold: number;
   featured: boolean;
   totalSold: number;
-  /**
-   * Total revenue generated by this product (server-side aggregate).
-   */
   revenue: number;
-  /**
-   * Number of times the product page has been viewed (server-side aggregate).
-   */
   views: number;
-  /**
-   * Name / identifier of the farmer who owns the product. Optional because the
-   * buyer-facing listings don’t always include the full farmer object.
-   */
-  farmer?: string;
+  farmer?: string | {
+    _id: string;
+    name: string;
+    avatar?: string;
+  };
   /**
    * Whether the product is certified organic. Optional because not every item
    * has this metadata.
@@ -316,7 +388,7 @@ export const authApi = {
     return response;
   },
 
-  async login(credentials: { email: string; password: string }): Promise<ApiResponse<AuthResponse>> {
+  async login(credentials: { email: string; password: string, role?: string }): Promise<ApiResponse<AuthResponse>> {
     const response = await apiRequest<AuthResponse>('/auth/login', 'POST', credentials);
     
     // If we got a token in the response, store it

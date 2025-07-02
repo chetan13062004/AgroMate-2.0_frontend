@@ -122,7 +122,7 @@ export default function RentalsPage() {
               >
                 <div className="relative h-56 bg-gray-100">
                   <Image
-                    src={eq.images?.[0] || "/placeholder.svg"}
+                    src={eq.images?.[0] || "/images/placeholder-product.svg"}
                     alt={eq.equipmentName}
                     fill
                     className="object-cover transition-transform duration-300 group-hover:scale-105"

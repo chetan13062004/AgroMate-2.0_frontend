@@ -63,7 +63,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
         
         // Handle different response structures
-        const userData = response.data?.user || response.data?.data?.user || null;
+        const userData = (response as { data?: { user?: User } }).data?.user || 
+                         (response as { data?: { data?: { user?: User } } }).data?.data?.user || 
+                         null;
         
         if (userData) {
           console.log('User data loaded successfully:', { 
@@ -154,8 +156,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         localStorage.setItem('token', token);
       }
       
-      // Redirect based on user role or to dashboard
-      const redirectPath = userData.role === 'admin' ? '/admin/dashboard' : '/dashboard';
+      // Redirect based on user role
+      let redirectPath = '/';
+      switch (userData.role) {
+        case 'admin':
+          redirectPath = '/admin/dashboard';
+          break;
+        case 'farmer':
+          redirectPath = '/farmer/dashboard';
+          break;
+        case 'buyer':
+          redirectPath = '/buyer/dashboard';
+          break;
+        default:
+          redirectPath = '/dashboard';
+      }
+      
       console.log('Redirecting to:', redirectPath);
       
       // Use Next.js router for client-side navigation
@@ -331,14 +347,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   const updateUser = (userData: User) => {
-    setUser(prev => ({
-      ...prev,
-      ...userData,
-      location: {
-        ...prev?.location,
-        ...userData.location
-      }
-    }));
+    setUser((prev: User | null) => {
+      if (!prev) return userData;
+      
+      return {
+        ...prev,
+        ...userData,
+        location: {
+          lat: userData.location?.lat ?? prev.location?.lat ?? 0,
+          lng: userData.location?.lng ?? prev.location?.lng ?? 0,
+          address: userData.location?.address ?? prev.location?.address ?? ''
+        }
+      } as User;
+    });
   };
 
   const value = {

@@ -6,14 +6,32 @@ import { NextRequest, NextResponse } from "next/server";
  * if the API call fails or the environment variable is missing.
  */
 async function generateMarketingDescription(product: string): Promise<string> {
+  // Check if the product is a food/farming product
+  const foodKeywords = [
+    'apple', 'orange', 'banana', 'mango', 'grape', 'berry', 'tomato',
+    'cucumber', 'carrot', 'potato', 'onion', 'garlic', 'spinach',
+    'lettuce', 'broccoli', 'milk', 'cheese', 'egg', 'meat', 'chicken',
+    'beef', 'pork', 'fish', 'seafood', 'dairy', 'fruit', 'vegetable',
+    'tractor', 'plow', 'seeder', 'fertilizer', 'irrigation', 'harvester',
+    'farm', 'agriculture', 'crop', 'livestock'
+  ];
+
+  const isFoodProduct = foodKeywords.some(keyword => 
+    product.toLowerCase().includes(keyword)
+  );
+
+  if (!isFoodProduct) {
+    throw new Error("This is not a food or farming product. Please enter a food item or farming product.");
+  }
+
   try {
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
       throw new Error("GEMINI_API_KEY environment variable not set");
     }
 
-    const model = "gemini-pro"; // text-only model is enough here
-    const prompt = `Write a catchy 2-3 sentence description to sell fresh ${product}. Highlight freshness, flavour, and quality. Do not mention AI.`;
+    const model = "gemini-pro"; 
+    const prompt = `Write a catchy 2-3 sentence description to sell ${product}. Highlight freshness, flavor, quality, and how it benefits farmers or consumers. Do not mention AI.`
 
     const resp = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
@@ -42,8 +60,7 @@ async function generateMarketingDescription(product: string): Promise<string> {
     return description;
   } catch (err) {
     console.warn("Gemini failed, falling back to local generation", err);
-    const adjectives = [
-      "premium",
+    const foodAdjectives = [
       "farm-fresh",
       "organic",
       "flavour-packed",
@@ -51,9 +68,19 @@ async function generateMarketingDescription(product: string): Promise<string> {
       "crisp",
       "hand-picked",
       "garden-grown",
+      "juicy",
+      "sweet",
+      "tender",
+      "rich",
+      "creamy",
+      "pure"
     ];
-    const picks = adjectives.sort(() => 0.5 - Math.random()).slice(0, 2);
-    return `Enjoy our ${picks.join(" & ")} ${product}, harvested at peak ripeness for unbeatable taste and quality. Perfect for elevating every meal with wholesome goodness.`;
+
+    const generateFallbackDescription = (product: string) => {
+      const picks = foodAdjectives.sort(() => 0.5 - Math.random()).slice(0, 2);
+      return `Enjoy our ${picks.join(" & ")} ${product}, harvested at peak ripeness for unbeatable taste and quality. Perfect for elevating every meal with wholesome goodness.`;
+    };
+    return generateFallbackDescription(product);
   }
 }
 
