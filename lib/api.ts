@@ -1,10 +1,13 @@
 const getApiBaseUrl = () => {
-  // In development, use the full URL to the local backend
+  // In development, use the full URL to the local backend and include /api
   if (process.env.NODE_ENV === 'development') {
     return 'http://localhost:5000/api';
   }
-  // In production, use the full URL
-  return process.env.NEXT_PUBLIC_API_URL || 'https://agromate-2-0.onrender.com/api';
+  // In production, ensure we always target the /api prefix on the backend
+  const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'https://agromate-2-0.onrender.com';
+  // Trim trailing slash, then append /api so callers don't need to include it
+  const normalized = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
+  return `${normalized}/api`;
 };
 
 const API_BASE_URL = getApiBaseUrl();
