@@ -4,7 +4,7 @@ const getApiBaseUrl = () => {
     return 'http://localhost:5000/api';
   }
   // In production, use the full URL
-  return process.env.NEXT_PUBLIC_API_URL || 'https://agromate-3-621t.onrender.com/api';
+  return process.env.NEXT_PUBLIC_API_URL || 'https://agromate-2-0.onrender.com/api';
 };
 
 const API_BASE_URL = getApiBaseUrl();

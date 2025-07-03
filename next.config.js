@@ -52,7 +52,7 @@ const nextConfig = {
         source: '/api/:path*',
         destination: process.env.NODE_ENV === 'development' 
           ? 'http://localhost:5000/api/:path*' 
-          : 'https://agromate-3-621t.onrender.com/api/:path*',
+          : 'https://agromate-2-0.onrender.com/api/:path*',
       },
     ];
   },
