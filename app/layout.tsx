@@ -6,7 +6,7 @@ import { AuthProvider } from "@/contexts/auth-context"
 import { CartProvider } from "@/contexts/cart-context"
 import { RentalCartProvider } from "@/contexts/rental-cart-context"
 import { NotificationProvider } from "@/contexts/notification-context"
-import { EnhancedChatProvider } from "@/contexts/enhanced-chat-context"
+
 import { WishlistProvider } from "@/contexts/WishlistContext"
 import { ThemeProvider } from "@/components/theme-provider"
 import { Toaster } from "@/components/ui/toaster"
@@ -109,7 +109,7 @@ export default function RootLayout({
               <CartProvider>
                 <RentalCartProvider>
                   <NotificationProvider>
-                    <EnhancedChatProvider>
+
                       <WishlistProvider>
                         <div className="min-h-screen flex flex-col">
                           <RoleBasedNavigation />
@@ -126,7 +126,7 @@ export default function RootLayout({
                         </div>
                         <Toaster />
                       </WishlistProvider>
-                    </EnhancedChatProvider>
+
                   </NotificationProvider>
                 </RentalCartProvider>
               </CartProvider>

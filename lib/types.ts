@@ -5,7 +5,15 @@ export interface Location {
 }
 
 export interface User {
-  _id: string
+  /**
+   * Some parts of the codebase and mock data use `id` while others rely on `_id`.
+   * To make the `User` interface compatible with both shapes we include `id` as an
+   * optional alias. Prefer using `_id` when the data originates from the backend
+   * (MongoDB) but keep `id` to avoid TypeScript errors in places such as the
+   * enhanced-chat context.
+   */
+  _id?: string
+  id?: string
   email: string
   name: string
   role: 'farmer' | 'buyer' | 'admin'

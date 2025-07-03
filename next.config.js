@@ -1,10 +1,23 @@
 /** @type {import('next').NextConfig} */
+// NOTE: Removed forced disabling of ISR and hard-coded database URL to avoid
+// breaking Next.js build internals and unexpected environment overrides.
+
 const nextConfig = {
   reactStrictMode: true,
   swcMinify: true,
   compress: true,
   poweredByHeader: false,
   generateEtags: true,
+  experimental: {
+    scrollRestoration: true,
+    // Enable module preloading
+    optimizePackageImports: ['@heroicons/react'],
+  },
+  // Environment variables
+  env: {
+    NEXT_PUBLIC_SITE_URL: process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000',
+    REVALIDATION_SECRET: process.env.REVALIDATION_SECRET || 'dev-secret-please-change-in-production',
+  },
   images: {
     domains: ['res.cloudinary.com', 'localhost:5000', '127.0.0.1:5000'],
     unoptimized: true,
@@ -82,18 +95,6 @@ const nextConfig = {
     };
 
     return config;
-  },
-  experimental: {
-    // Enable React 18 concurrent features
-    reactRoot: true,
-    // Improve HMR and Fast Refresh
-    scrollRestoration: true,
-    // Enable webpack 5 persistent caching
-    workerThreads: true,
-    // Disable CSS optimization to prevent critters error
-    // optimizeCss: false,
-    // Enable module preloading
-    optimizePackageImports: ['@heroicons/react'],
   },
   // Disable TypeScript type checking during build for faster builds
   typescript: {
